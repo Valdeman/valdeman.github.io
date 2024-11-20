@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Color Figure Grid Game</title>
+    <style>
+        #grid {
+            display: grid;
+            justify-content: center;
+            margin: 20px auto;
+            gap: 5px;
+        }
+
+        .grid-cell {
+            width: 50px;
+            height: 50px;
+            background-color: lightgray;
+            border: 1px solid #ccc;
+            position: relative;
+        }
+
+        .figure {
+            display: flex;
+            position: absolute;
+            top: 5px;
+            left: 5px;
+        }
+
+        .circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin: 2px;
+        }
+
+        #draggable-circles {
+            display: flex;
+            justify-content: center;
+            margin: 20px;
+        }
+
+        .draggable-figure {
+            display: flex;
+            margin: 0 10px;
+            position: static;
+        }
+
+        #score {
+            text-align: center;
+            font-size: 24px;
+            margin-top: 20px;
+        }
+
+        #game-over {
+            text-align: center;
+            font-size: 32px;
+            color: red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="score">Score: 0</div>
+    <div id="game-over">Game Over</div>
+    <div id="grid"></div>
+    <div id="draggable-circles"></div>
+
+    <script>
+        // Variables controlling the grid size
+        var gridRows = 8;
+        var gridCols = 8;
+
+        var score = 0;
+        var gridContainer = document.getElementById('grid');
+        var scoreDisplay = document.getElementById('score');
+        var gameOverDisplay = document.getElementById('game-over');
+        var gridState = [];
+        var gameOver = false;
+        const colors = ['red', 'orange', 'blue', 'yellow', 'green', 'purple'];
+        const draggableCirclesContainer = document.getElementById('draggable-circles');
+
+        function createGrid(rows, cols) {
+            gridState = [];
+            gridContainer.innerHTML = ''; // Clear previous grid
+            gridContainer.style.gridTemplateColumns = `repeat(${cols}, 50px)`;
+            gridContainer.style.gridTemplateRows = `repeat(${rows}, 50px)`;
+
+            for (let row = 0; row < rows; row++) {
+                gridState[row] = [];
+                for (let col = 0; col < cols; col++) {
+                    let cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    gridContainer.appendChild(cell);
+
+                    // Randomly decide to place a circle in the cell
+                    if (Math.random() < 0.3) { // Adjusted chance to place a circle
+                        let circle = document.createElement('div');
+                        circle.classList.add('circle');
+                        let randomColor = colors[Math.floor(Math.random() * colors.length)];
+                        circle.style.position = 'absolute';
+                        circle.style.left = '5px';
+                        circle.style.top = '5px';
+                        circle.style.backgroundColor = randomColor;
+                        circle.dataset.color = randomColor;
+                        cell.appendChild(circle);
+                        gridState[row][col] = randomColor;
+                    } else {
+                        gridState[row][col] = null;
+                    }
+                }
+            }
+        }
+
+        function createDraggableFigures(count = 1) {
+            draggableCirclesContainer.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const figure = document.createElement('div');
+                figure.classList.add('draggable-figure');
+                figure.draggable = true;
+
+                const randomFigure = getRandomFigure();
+                randomFigure.forEach(([x, y], index) => {
+                    const circle = document.createElement('div');
+                    circle.classList.add('circle');
+                    circle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    circle.dataset.index = index;
+                    circle.style.position = 'absolute';
+                    circle.style.left = `${x * 45}px`;
+                    circle.style.top = `${y * 45}px`;
+                    figure.appendChild(circle);
+                });
+
+                figure.id = 'figure-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                figure.addEventListener('dragstart', dragStart);
+                figure.addEventListener('dragend', dragEnd);
+                draggableCirclesContainer.appendChild(figure);
+            }
+        }
+        
+        function getRandomFigure() {
+            const figures = [
+            // 2-piece shapes
+                [[0, 0], [0, 1]], // Horizontal line
+                [[0, 0], [1, 0]], // Vertical line
+                [[0, 0], [1, 1]], // Diagonal corner touching top-left to bottom-right
+                [[0, 1], [1, 0]], // Diagonal corner touching top-right to bottom-left
+
+                // 3-piece shapes
+                [[0, 0], [0, 1], [0, 2]], // Horizontal line
+                [[0, 0], [1, 0], [2, 0]], // Vertical line
+                [[0, 0], [1, 0], [1, 1]], // L shape pointing right
+                [[0, 1], [1, 0], [1, 1]], // L shape pointing left
+                [[0, 0], [0, 1], [1, 0]], // L shape pointing down
+                [[0, 0], [0, 1], [1, 1]], // L shape pointing up
+                [[0, 0], [0, 1], [0, 2]], // T horizontal
+                [[0, 1], [1, 0], [1, 2]], // T upside down
+                [[0, 1], [1, 0], [2, 1]], // T vertical pointing left
+                [[0, 0], [1, 0], [2, 0]]  // T vertical pointing right
+            ];
+            return figures[Math.floor(Math.random() * figures.length)];
+        }
+
+        let mouseOffsetX = 0;
+        let mouseOffsetY = 0;
+
+        function handleMouseDown(e) {
+            const rect = e.target.getBoundingClientRect();
+            mouseOffsetX = rect.left;
+            mouseOffsetY = rect.top;
+            
+            console.log(rect.left)
+            console.log(rect.top)
+            //console.log(mouseOffsetX)
+            //console.log(mouseOffsetY)
+        }
+
+        draggableCirclesContainer.addEventListener('mousedown', handleMouseDown);
+
+        function dragStart(e) {
+            if (gameOver) return; // Prevent dropping if game is over
+            
+            e.dataTransfer.setData('text/plain', e.target.id);
+            setTimeout(() => {
+                e.target.style.visibility = 'hidden';
+            }, 0);
+        }
+
+        function dragEnd(e) {
+            e.target.style.visibility = 'visible';
+        }
+
+        function dragOver(e) {
+            if (gameOver) return; // Prevent dropping if game is over
+            e.preventDefault();
+        }
+
+                // Function to remove a circle from a specific cell
+        function removeCircleFromCell(row, col) {
+            var cells = gridContainer.getElementsByClassName('grid-cell');
+            for (let i = 0; i < cells.length; i++) {
+                if (parseInt(cells[i].dataset.row) == row && parseInt(cells[i].dataset.col) == col) {
+                    let circle = cells[i].querySelector('.circle');
+                    if (circle) {
+                        circle.remove();
+                    }
+                    break;
+                }
+            }
+        }
+
+
+
+
+        function checkForMatches() {
+            const matchCount = 4; // Change this value to control the number of circles required for a match
+            let cellsToRemove = [];
+
+            // Check for matches
+            for (let row = 0; row < gridRows; row++) {
+                for (let col = 0; col < gridCols; col++) {
+                    let color = gridState[row][col];
+                    if (color) {
+                        // Check horizontally
+                        if (col <= gridCols - matchCount) {
+                            let match = true;
+                            for (let i = 1; i < matchCount; i++) {
+                                if (gridState[row][col + i] != color) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    cellsToRemove.push({ row: row, col: col + i });
+                                }
+                            }
+                        }
+                        // Check vertically
+                        if (row <= gridRows - matchCount) {
+                            let match = true;
+                            for (let i = 1; i < matchCount; i++) {
+                                if (gridState[row + i][col] != color) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    cellsToRemove.push({ row: row + i, col: col });
+                                }
+                            }
+                        }
+                        // Check diagonal down-right
+                        if (row <= gridRows - matchCount && col <= gridCols - matchCount) {
+                            let match = true;
+                            for (let i = 1; i < matchCount; i++) {
+                                if (gridState[row + i][col + i] != color) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    cellsToRemove.push({ row: row + i, col: col + i });
+                                }
+                            }
+                        }
+                        // Check diagonal up-right
+                        if (row >= matchCount - 1 && col <= gridCols - matchCount) {
+                            let match = true;
+                            for (let i = 1; i < matchCount; i++) {
+                                if (gridState[row - i][col + i] != color) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                for (let i = 0; i < matchCount; i++) {
+                                    cellsToRemove.push({ row: row - i, col: col + i });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Remove duplicates from cellsToRemove
+            cellsToRemove = cellsToRemove.filter((cell, index, self) =>
+                index === self.findIndex((t) => (
+                    t.row === cell.row && t.col === cell.col
+                ))
+            );
+
+            // Remove the circles from the grid and update the grid state
+            if (cellsToRemove.length > 0) {
+                for (let cell of cellsToRemove) {
+                    gridState[cell.row][cell.col] = null;
+                    removeCircleFromCell(cell.row, cell.col);
+                }
+                calculateScore(cellsToRemove.length);
+            }
+        }
+
+        // function checkForMatches() {
+        //     let cellsToRemove = [];
+        //     // Check for six in a row
+        //     for (let row = 0; row < gridRows; row++) {
+        //         for (let col = 0; col < gridCols; col++) {
+        //             let color = gridState[row][col];
+        //             if (color) {
+        //                 // Check horizontally
+        //                 if (col <= gridCols - 6) {
+        //                     let match = true;
+        //                     for (let i = 1; i < 6; i++) {
+        //                         if (gridState[row][col + i] != color) {
+        //                             match = false;
+        //                             break;
+        //                         }
+        //                     }
+        //                     if (match) {
+        //                         for (let i = 0; i < 6; i++) {
+        //                             cellsToRemove.push({ row: row, col: col + i });
+        //                         }
+        //                     }
+        //                 }
+        //                 // Check vertically
+        //                 if (row <= gridRows - 6) {
+        //                     let match = true;
+        //                     for (let i = 1; i < 6; i++) {
+        //                         if (gridState[row + i][col] != color) {
+        //                             match = false;
+        //                             break;
+        //                         }
+        //                     }
+        //                     if (match) {
+        //                         for (let i = 0; i < 6; i++) {
+        //                             cellsToRemove.push({ row: row + i, col: col });
+        //                         }
+        //                     }
+        //                 }
+        //                 // Check diagonal down-right
+        //                 if (row <= gridRows - 6 && col <= gridCols - 6) {
+        //                     let match = true;
+        //                     for (let i = 1; i < 6; i++) {
+        //                         if (gridState[row + i][col + i] != color) {
+        //                             match = false;
+        //                             break;
+        //                         }
+        //                     }
+        //                     if (match) {
+        //                         for (let i = 0; i < 6; i++) {
+        //                             cellsToRemove.push({ row: row + i, col: col + i });
+        //                         }
+        //                     }
+        //                 }
+        //                 // Check diagonal up-right
+        //                 if (row >= 5 && col <= gridCols - 6) {
+        //                     let match = true;
+        //                     for (let i = 1; i < 6; i++) {
+        //                         if (gridState[row - i][col + i] != color) {
+        //                             match = false;
+        //                             break;
+        //                         }
+        //                     }
+        //                     if (match) {
+        //                         for (let i = 0; i < 6; i++) {
+        //                             cellsToRemove.push({ row: row - i, col: col + i });
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+
+        //     // Remove duplicates from cellsToRemove
+        //     cellsToRemove = cellsToRemove.filter((cell, index, self) =>
+        //         index === self.findIndex((t) => (
+        //             t.row === cell.row && t.col === cell.col
+        //         ))
+        //     );
+
+        //     // Remove the circles from the grid and update the grid state
+        //     if (cellsToRemove.length > 0) {
+        //         // Remove the circles
+        //         for (let cell of cellsToRemove) {
+        //             gridState[cell.row][cell.col] = null;
+        //             removeCircleFromCell(cell.row, cell.col);
+        //         }
+        //         // Calculate score
+        //         calculateScore(cellsToRemove.length);
+        //     }
+
+        // }
+        function drop(e) {
+            e.preventDefault();
+            if (gameOver) return; // Prevent dropping if game is over
+            const figureId = e.dataTransfer.getData('text/plain');
+            const figure = document.getElementById(figureId);
+            const cell = e.target.closest('.grid-cell');
+            if (!cell) return;
+
+            const cellRect = cell.getBoundingClientRect();
+            const dropX = e.clientX - cellRect.left - mouseOffsetX;
+            const dropY = e.clientY - cellRect.top - mouseOffsetY;
+
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+
+            const canPlace = Array.from(figure.children).every(circle => {
+                const xOffset = Math.floor((parseInt(circle.style.left) + dropX) / 45);
+                const yOffset = Math.floor((parseInt(circle.style.top) + dropY) / 45);
+                const targetRow = row + yOffset;
+                const targetCol = col + xOffset;
+
+                return (
+                    targetRow >= 0 &&
+                    targetRow < gridRows &&
+                    targetCol >= 0 &&
+                    targetCol < gridCols &&
+                    !gridState[targetRow][targetCol]
+                );
+            });
+
+            if (canPlace) {
+                Array.from(figure.children).forEach(circle => {
+                    const xOffset = Math.floor((parseInt(circle.style.left) + dropX) / 45);
+                    const yOffset = Math.floor((parseInt(circle.style.top) + dropY) / 45);
+                    const targetRow = row + yOffset;
+                    const targetCol = col + xOffset;
+
+                    gridState[targetRow][targetCol] = circle.style.backgroundColor;
+
+                    const targetCell = gridContainer.querySelector(
+                        `[data-row="${targetRow}"][data-col="${targetCol}"]`
+                    );
+                    const newCircle = circle.cloneNode();
+                    newCircle.style.position = 'absolute';
+                    newCircle.style.left = `5px`;
+                    newCircle.style.top = `5px`;
+                    targetCell.appendChild(newCircle);
+                });
+
+                figure.remove();
+                createDraggableFigures(1);
+            }
+            // Check for matches and apply game logic
+            checkForSandwiches();
+            checkForMatches();
+            
+            
+            // Check for game over
+            if (isGridFull()) {
+                endGame();
+            }
+        }
+        function canFitAnywhereInGrid(figure) {
+            const circles = figure.children;
+            const figureOffsets = Array.from(circles).map(circle => {
+                const x = parseInt(circle.style.left) / 45;
+                const y = parseInt(circle.style.top) / 45;
+                return { x, y };
+            });
+            const gridWidth = gridRows;
+            const gridHeight = gridCols;
+
+            for (let startX = 0; startX < gridWidth; startX++) {
+                for (let startY = 0; startY < gridHeight; startY++) {
+                    // Check if the figure can fit at this starting position
+                    let canFit = true;
+
+                    for (const offset of figureOffsets) {
+                        const x = startX + offset.x;
+                        const y = startY + offset.y;
+
+                        // Check boundaries
+                        if (x < 0 || x >= gridHeight || y < 0 || y >= gridHeight) {
+                            canFit = false;
+                            break;
+                        }
+
+                        // Check if position is occupied
+                        if (gridState.has(`${x}-${y}`)) {
+                            canFit = false;
+                            break;
+                        }
+                    }
+
+                    if (canFit) {
+                        // The figure fits at this position
+                        return true;
+                    }
+                }
+            }
+
+            // No position found where the figure can fit
+            return false;
+        }
+        
+
+        // Function to check for matches and apply game rules
+        // Function to calculate and update the score
+        function calculateScore(cellsRemoved) {
+            let basePoints = (cellsRemoved / 6) * 6; // Each set of 6 gives 6 points
+
+            // Check for combos
+            let multiplier = 1;
+            if (cellsRemoved >= 8) {
+                if (cellsRemoved >= 8 && cellsRemoved < 12) {
+                    multiplier = 2;
+                } else if (cellsRemoved >= 12 && cellsRemoved < 16) {
+                    multiplier = 3;
+                } else if (cellsRemoved >= 16) {
+                    multiplier = 4;
+                }
+            }
+
+            let totalPoints = basePoints * multiplier;
+            score += totalPoints;
+            scoreDisplay.textContent = 'Score: ' + score;
+        }
+
+        // Function to check for sandwich patterns
+        function checkForSandwiches() {
+            for (let row = 0; row < gridRows; row++) {
+                for (let col = 0; col < gridCols; col++) {
+                    let color = gridState[row][col];
+                    if (color) {
+                        // Check horizontally
+                        if (col <= gridCols - 3) {
+                            if (gridState[row][col + 2] == color &&
+                                gridState[row][col + 1] &&
+                                gridState[row][col + 1] != color) {
+                                gridState[row][col + 1] = color;
+                                updateCellColor(row, col + 1, color);
+                            }
+                        }
+                        // Check vertically
+                        if (row <= gridRows - 3) {
+                            if (gridState[row + 2][col] == color &&
+                                gridState[row + 1][col] &&
+                                gridState[row + 1][col] != color) {
+                                gridState[row + 1][col] = color;
+                                updateCellColor(row + 1, col, color);
+                            }
+                        }
+                        // Check diagonal down-right
+                        if (row <= gridRows - 3 && col <= gridCols - 3) {
+                            if (gridState[row + 2][col + 2] == color &&
+                                gridState[row + 1][col + 1] &&
+                                gridState[row + 1][col + 1] != color) {
+                                gridState[row + 1][col + 1] = color;
+                                updateCellColor(row + 1, col + 1, color);
+                            }
+                        }
+                        // Check diagonal up-right
+                        if (row >= 2 && col <= gridCols - 3) {
+                            if (gridState[row - 2][col + 2] == color &&
+                                gridState[row - 1][col + 1] &&
+                                gridState[row - 1][col + 1] != color) {
+                                gridState[row - 1][col + 1] = color;
+                                updateCellColor(row - 1, col + 1, color);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Function to update the color of a specific cell
+        function updateCellColor(row, col, color) {
+            var cells = gridContainer.getElementsByClassName('grid-cell');
+            for (let i = 0; i < cells.length; i++) {
+                if (parseInt(cells[i].dataset.row) == row && parseInt(cells[i].dataset.col) == col) {
+                    let circle = cells[i].querySelector('.circle');
+                    if (!circle) {
+                        circle = document.createElement('div');
+                        circle.classList.add('circle');
+                        cells[i].appendChild(circle);
+                    }
+                    circle.style.backgroundColor = color;
+                    circle.dataset.color = color;
+                    gridState[row][col] = color;
+                    break;
+                }
+            }
+        }
+
+        // Function to check if the grid is full
+        function isGridFull() {
+            for (let row = 0; row < gridRows; row++) {
+                for (let col = 0; col < gridCols; col++) {
+                    if (gridState[row][col] == null) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Function to end the game
+        function endGame() {
+            gameOver = true;
+            gameOverDisplay.style.display = 'block';
+
+            // Remove draggable circles
+            draggableCirclesContainer.innerHTML = '';
+
+            // Remove event listeners from grid cells
+            var cells = gridContainer.getElementsByClassName('grid-cell');
+            for (let i = 0; i < cells.length; i++) {
+                cells[i].removeEventListener('dragover', dragOver);
+                cells[i].removeEventListener('drop', drop);
+            }
+        }
+        function initializeGame() {
+            createGrid(gridRows, gridCols);
+            createDraggableFigures(1);
+            gridContainer.addEventListener('dragover', dragOver);
+            gridContainer.addEventListener('drop', drop);
+        }
+
+        initializeGame();
+    </script>
+
+</body>
+</html>
